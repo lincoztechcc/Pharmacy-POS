@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
     const { tenantId, id: userId } = decoded;
 
     const body = await req.json();
-    const { items, totalAmount, paymentMethod, customerId, discount, tax, deliveryCharges, orderType, tableId, riderName, notes, status, paymentStatus, specialInstructions } = body;
+    const { items, totalAmount, paymentMethod, customerId, discount, tax, deliveryCharges, orderType, tableId, riderName, notes, status, paymentStatus, specialInstructions, redeemedPoints } = body;
 
     // Get the user's branch
     const user = await prisma.user.findUnique({
@@ -278,6 +278,27 @@ export async function POST(req: NextRequest) {
               data: { stock: { decrement: item.quantity } }
             });
           }
+        }
+      }
+
+      // Handle loyalty points: deduct redeemed points and award new points for completed purchase
+      if (customerId && customerId !== "none") {
+        const pointsToRedeem = Math.max(0, parseInt(String(redeemedPoints || "0"), 10));
+        const isCompleted = (status || "COMPLETED") === "COMPLETED";
+        const earnedPoints = isCompleted ? Math.floor(roundCurrency(totalAmount) / 100) : 0;
+
+        if (pointsToRedeem > 0 || earnedPoints > 0) {
+          const cust = await tx.customer.findUnique({
+            where: { id: customerId },
+            select: { loyaltyPts: true },
+          });
+          const currentPts = cust?.loyaltyPts || 0;
+          const finalPts = Math.max(0, currentPts - pointsToRedeem + earnedPoints);
+
+          await tx.customer.update({
+            where: { id: customerId },
+            data: { loyaltyPts: finalPts },
+          });
         }
       }
 

@@ -60,6 +60,7 @@ function POSContent() {
   const [deliveryCharges, setDeliveryCharges] = useState("0");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [redeemedPoints, setRedeemedPoints] = useState(0);
   const [orderType, setOrderType] = useState("RETAIL");
   const [selectedTable, setSelectedTable] = useState("");
   const [riderName, setRiderName] = useState("");
@@ -997,6 +998,7 @@ function POSContent() {
         specialInstructions: specialInstructions || null,
         orderType,
         customerId: selectedCustomer && selectedCustomer !== "none" ? selectedCustomer : undefined,
+        redeemedPoints: redeemedPoints || 0,
         tableId: selectedTable && selectedTable !== "none" ? selectedTable : undefined,
         riderName: orderType === "DELIVERY" ? riderName : undefined,
         notes: finalNotes || null,
@@ -1020,6 +1022,7 @@ function POSContent() {
       setCart([]);
       setDiscount("0");
       setDiscountType("AMOUNT");
+      setRedeemedPoints(0);
       setDeliveryCharges("0");
       setSpecialInstructions("");
       setRiderName("");
@@ -1122,6 +1125,7 @@ function POSContent() {
       setCart([]);
       setDiscount("0");
       setDiscountType("AMOUNT");
+      setRedeemedPoints(0);
       setDeliveryCharges("0");
       setSpecialInstructions("");
       setRiderName("");
@@ -1860,18 +1864,84 @@ useEffect(() => {
         {/* Customer + Order Type */}
         <div className="px-3.5 py-2 border-b border-slate-100 bg-slate-50/40 shrink-0">
           {(!isRestaurant) && (
-            <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
-              <SelectTrigger className="w-full !h-8 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-800">
-                <User className="w-3.5 h-3.5 mr-1.5 text-blue-600 shrink-0" />
-                <SelectValue placeholder="Walk-in Customer (Select for Loyalty)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Walk-in Customer</SelectItem>
-                {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name} {c.phone ? `· ${c.phone}` : ""}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1.5">
+              <Select
+                value={selectedCustomer}
+                onValueChange={(val) => {
+                  setSelectedCustomer(val);
+                  setRedeemedPoints(0);
+                }}
+              >
+                <SelectTrigger className="w-full !h-8 rounded-lg border-slate-200 bg-white text-xs font-semibold text-slate-800">
+                  <User className="w-3.5 h-3.5 mr-1.5 text-blue-600 shrink-0" />
+                  <SelectValue placeholder="Walk-in Customer (Select for Loyalty)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Walk-in Customer</SelectItem>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name} {c.phone ? `· ${c.phone}` : ""} {c.loyaltyPts ? `(⭐ ${c.loyaltyPts} pts)` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedCustomer && selectedCustomer !== "none" && (() => {
+                const c = customers.find((cust) => cust.id === selectedCustomer);
+                if (!c) return null;
+                const pointsEarned = Math.floor(subtotal / 100);
+                const availablePts = c.loyaltyPts || 0;
+                return (
+                  <div className="flex items-center justify-between px-2.5 py-1.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg text-xs shadow-xs animate-in fade-in">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-amber-500 font-black text-sm">⭐</span>
+                      <span className="font-bold text-slate-800">
+                        Loyalty: <span className="text-amber-600 font-black">{availablePts} pts</span>
+                      </span>
+                      {subtotal > 0 && (
+                        <span className="text-[10px] text-amber-700 font-semibold bg-amber-100/60 px-1.5 py-0.5 rounded">
+                          +{pointsEarned} pts this bill
+                        </span>
+                      )}
+                    </div>
+                    {redeemedPoints > 0 ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                          -{redeemedPoints} pts applied
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRedeemedPoints(0);
+                            setDiscount("0");
+                            toast.info("Points redemption removed");
+                          }}
+                          className="text-[10px] text-rose-600 font-bold hover:underline cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      availablePts > 0 && subtotal > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const redeemAmt = Math.min(availablePts, Math.floor(subtotal));
+                            setRedeemedPoints(redeemAmt);
+                            setDiscount(String(redeemAmt));
+                            setDiscountType("AMOUNT");
+                            toast.success(`Redeemed ${redeemAmt} points as PKR ${redeemAmt} discount!`);
+                          }}
+                          className="text-[10px] font-black uppercase tracking-wider bg-amber-500 hover:bg-amber-600 text-white px-2 py-0.5 rounded shadow-xs active:scale-95 transition-all cursor-pointer"
+                          title="Click to apply loyalty points as discount"
+                        >
+                          Redeem
+                        </button>
+                      )
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
           )}
           
           {/* Order Type & Tables (Conditional for Restaurant Module) */}
