@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { setCachedUser } from "@/lib/user-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -109,14 +110,21 @@ export async function POST(req: NextRequest) {
       { expiresIn: "1d" }
     );
 
+    const userData = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      tenant: user.tenant,
+      isImpersonated: false,
+      impersonatorEmail: null,
+    };
+
+    // Pre-seed server memory cache so immediate /api/auth/me requests hit in <1ms without DB query
+    setCachedUser(user.id, userData);
+
     const response = NextResponse.json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        tenant: user.tenant,
-      },
+      user: userData,
     });
 
     response.cookies.set("token", token, {

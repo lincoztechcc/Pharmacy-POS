@@ -45,9 +45,11 @@ const prismaClientSingleton = () => {
     ssl: isLocalhost ? false : { rejectUnauthorized: false },
     max: maxConnections,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 15000,
+    connectionTimeoutMillis: 5000,
     maxUses: 7500, // Recycle connections periodically for Supabase pooler health
     allowExitOnIdle: true,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
   });
 
   pool.on("error", (err) => {

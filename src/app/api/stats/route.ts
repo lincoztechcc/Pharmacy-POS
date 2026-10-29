@@ -58,14 +58,21 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    return NextResponse.json({
-      todayRevenue: roundCurrency(todayStats._sum.totalAmount),
-      todayOrdersCount: todayStats._count._all,
-      monthRevenue: roundCurrency(monthStats._sum.totalAmount),
-      monthOrdersCount: monthStats._count._all,
-      totalProducts,
-      recentOrders,
-    });
+    return NextResponse.json(
+      {
+        todayRevenue: roundCurrency(todayStats._sum.totalAmount),
+        todayOrdersCount: todayStats._count._all,
+        monthRevenue: roundCurrency(monthStats._sum.totalAmount),
+        monthOrdersCount: monthStats._count._all,
+        totalProducts,
+        recentOrders,
+      },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=15, stale-while-revalidate=30",
+        },
+      }
+    );
   } catch (error) {
     return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 });
   }

@@ -44,18 +44,37 @@ export default function Dashboard() {
     totalProducts: 0,
     recentOrders: []
   });
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem("user_cache");
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const userPromise = user
+          ? Promise.resolve({ data: user })
+          : axios.get("/api/auth/me").then((res) => {
+              if (typeof window !== "undefined") {
+                try {
+                  sessionStorage.setItem("user_cache", JSON.stringify(res.data));
+                } catch {}
+              }
+              return res;
+            });
+
         const [statsRes, userRes] = await Promise.all([
           axios.get("/api/stats"),
-          axios.get("/api/auth/me")
+          userPromise,
         ]);
         setStats(statsRes.data);
-        setUser(userRes.data);
+        if (userRes?.data) setUser(userRes.data);
       } catch (err) {
         toast.error("Failed to load dashboard stats");
       } finally {

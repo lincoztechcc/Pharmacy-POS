@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
       where: { tenantId: user.tenantId },
       orderBy: { name: "asc" },
     });
-    return NextResponse.json(categories);
+    return NextResponse.json(categories, {
+      headers: {
+        "Cache-Control": "private, max-age=60, stale-while-revalidate=120",
+      },
+    });
   } catch (error: any) {
     console.error("GET Categories Error:", error);
     return NextResponse.json({ error: "Failed to load categories" }, { status: 500 });

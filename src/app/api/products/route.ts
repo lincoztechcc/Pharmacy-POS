@@ -32,7 +32,11 @@ export async function GET(req: NextRequest) {
       orderBy: { name: "asc" }
     });
 
-    return NextResponse.json(products);
+    return NextResponse.json(products, {
+      headers: {
+        "Cache-Control": "private, max-age=10, stale-while-revalidate=30",
+      },
+    });
   } catch (error: any) {
     console.error("GET Products Critical Error:", error);
     return NextResponse.json({

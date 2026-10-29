@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Shield, Mail, Lock, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  // Prefetch critical dashboard routes in advance so navigation is instantaneous
+  useEffect(() => {
+    router.prefetch("/dashboard");
+    router.prefetch("/dashboard/pos");
+    router.prefetch("/admin-dashboard");
+  }, [router]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return toast.error("Please fill in all fields");
@@ -24,10 +31,24 @@ export default function LoginPage() {
     try {
       const res = await axios.post("/api/auth/login", { email, password });
       toast.success("Welcome back, " + res.data.user.name);
+
+      // Hydrate client-side fast storage so layout & views render in 0ms without waiting for /api/auth/me
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem("user_cache", JSON.stringify(res.data.user));
+        } catch {}
+      }
       
-      // Redirect based on role
-      if (res.data.user.role === "SUPER_ADMIN") {
+      // Direct instant redirection based on role — avoids double redirects
+      const role = res.data.user.role;
+      if (role === "SUPER_ADMIN") {
         router.push("/admin-dashboard");
+      } else if (role === "CASHIER") {
+        router.push("/dashboard/pos");
+      } else if (role === "HR_STAFF") {
+        router.push("/dashboard/users");
+      } else if (role === "KITCHEN_STAFF") {
+        router.push("/dashboard/kitchen");
       } else {
         router.push("/dashboard");
       }

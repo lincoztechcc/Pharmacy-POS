@@ -53,12 +53,30 @@ export default function TenantLayout({
 }) {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isMobileOpen, setMobileOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem("user_cache");
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
-    axios.get("/api/auth/me").then(res => setUser(res.data)).catch(() => { });
+    axios
+      .get("/api/auth/me")
+      .then((res) => {
+        setUser(res.data);
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("user_cache", JSON.stringify(res.data));
+          } catch {}
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // RBAC Guard: Redirect users to their allowed screens based on role
@@ -89,6 +107,11 @@ export default function TenantLayout({
 
   const handleLogout = async () => {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.removeItem("user_cache");
+        } catch {}
+      }
       await axios.post("/api/auth/logout");
       toast.success("Logged out successfully");
       router.push("/login");

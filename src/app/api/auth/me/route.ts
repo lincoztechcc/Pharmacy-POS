@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import prisma from "@/lib/prisma";
+import { getCachedUser, setCachedUser } from "@/lib/user-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +16,21 @@ export async function GET(req: NextRequest) {
     }
 
     const decoded: any = jwt.verify(token, JWT_SECRET);
+    const userId = decoded.id;
+
+    // Check fast server-side in-memory cache first
+    const cached = getCachedUser(userId);
+    if (cached && !decoded.isImpersonated) {
+      return NextResponse.json(cached, {
+        headers: {
+          "Cache-Control": "private, max-age=15, stale-while-revalidate=30",
+          "X-User-Cache": "HIT",
+        },
+      });
+    }
     
     const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
+      where: { id: userId },
       include: { 
         tenant: {
           include: {
@@ -40,7 +53,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json({
+    const userData = {
       id: user.id,
       name: user.name,
       email: user.email,
@@ -48,6 +61,18 @@ export async function GET(req: NextRequest) {
       tenant: user.tenant,
       isImpersonated: Boolean(decoded.isImpersonated),
       impersonatorEmail: decoded.impersonatorEmail || null,
+    };
+
+    // Cache user profile in memory
+    if (!decoded.isImpersonated) {
+      setCachedUser(userId, userData);
+    }
+
+    return NextResponse.json(userData, {
+      headers: {
+        "Cache-Control": "private, max-age=15, stale-while-revalidate=30",
+        "X-User-Cache": "MISS",
+      },
     });
   } catch (error) {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });

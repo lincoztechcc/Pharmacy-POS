@@ -68,8 +68,27 @@ function POSContent() {
   const [deliveryCustomerAddress, setDeliveryCustomerAddress] = useState("");
   const [lastOrder, setLastOrder] = useState<any>(null);
   const [showReceipt, setShowReceipt] = useState(false);
-  const [tenantSettings, setTenantSettings] = useState<any>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem("user_cache");
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
+  const [tenantSettings, setTenantSettings] = useState<any>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem("user_cache");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          return parsed?.tenant || null;
+        }
+      } catch {}
+    }
+    return null;
+  });
   const [detailsSaved, setDetailsSaved] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [isRenamingTable, setIsRenamingTable] = useState(false);
@@ -164,29 +183,47 @@ function POSContent() {
   };
 
   const loadData = async () => {
-    console.log("POS: Starting data load...");
     try {
-      const [pRes, cRes, catRes, authRes, oRes] = await Promise.all([
-        axios.get("/api/products").catch(e => { console.error("POS: Products fail", e); return { data: [] }; }),
-        axios.get("/api/customers").catch(e => { console.error("POS: Customers fail", e); return { data: [] }; }),
-        axios.get("/api/categories").catch(e => { console.error("POS: Categories fail", e); return { data: [] }; }),
-        axios.get("/api/auth/me").catch(e => { console.error("POS: Auth fail", e); return { data: {} }; }),
-        axios.get("/api/orders?limit=100").catch(e => { console.error("POS: Orders fail", e); return { data: { orders: [] } }; }),
+      const authPromise = currentUser
+        ? Promise.resolve({ data: currentUser })
+        : axios.get("/api/auth/me").then((res) => {
+            if (typeof window !== "undefined") {
+              try { sessionStorage.setItem("user_cache", JSON.stringify(res.data)); } catch {}
+            }
+            return res;
+          }).catch((e) => { console.error("POS: Auth fail", e); return { data: null }; });
+
+      const [pRes, cRes, catRes, authRes] = await Promise.all([
+        axios.get("/api/products").catch((e) => { console.error("POS: Products fail", e); return { data: [] }; }),
+        axios.get("/api/customers").catch((e) => { console.error("POS: Customers fail", e); return { data: [] }; }),
+        axios.get("/api/categories").catch((e) => { console.error("POS: Categories fail", e); return { data: [] }; }),
+        authPromise,
       ]);
       
       setProducts(Array.isArray(pRes.data) ? pRes.data : []);
       setCustomers(Array.isArray(cRes.data) ? cRes.data : []);
       setTables([]);
       setCategories(Array.isArray(catRes.data) ? catRes.data : []);
-      setOrdersLogList(oRes && oRes.data && Array.isArray(oRes.data.orders) ? oRes.data.orders : []);
-      if (authRes.data) {
+      if (authRes?.data) {
         setCurrentUser(authRes.data);
-        setTenantSettings(authRes.data.tenant);
+        if (authRes.data.tenant) setTenantSettings(authRes.data.tenant);
       }
+
+      // Fast UI unlock
+      setLoading(false);
+
+      // Background load recent orders without blocking UI interaction
+      axios.get("/api/orders?limit=100")
+        .then((oRes) => {
+          if (oRes?.data && Array.isArray(oRes.data.orders)) {
+            setOrdersLogList(oRes.data.orders);
+          }
+        })
+        .catch((e) => console.error("POS: Background Orders fail", e));
+
     } catch (err) {
       console.error("POS: Critical load error", err);
       toast.error("POS initialization failed. Check connection.");
-    } finally {
       setLoading(false);
     }
   };

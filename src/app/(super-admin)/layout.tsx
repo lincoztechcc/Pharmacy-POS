@@ -44,6 +44,11 @@ export default function SuperAdminLayout({
 
   const handleLogout = async () => {
     try {
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.removeItem("user_cache");
+        } catch {}
+      }
       await axios.post("/api/auth/logout");
       toast.success("Logged out successfully");
       router.push("/login");
