@@ -400,9 +400,6 @@ function POSContent() {
     }
 
     win.document.write(`
-      <html>
-      <head>
-        <title>${title} - ${tenantName}</title>
         <style>
           @page {
             size: A4 portrait;
@@ -836,7 +833,6 @@ function POSContent() {
     }
     const tableName = tables.find(t => t.id === order.tableId)?.name || "";
     win.document.write(`
-      <html><head><title>KOT - Order #${order.orderNumber}</title>
       <style>
         @page { size: 80mm auto; margin: 0; }
         html, body {
@@ -1036,7 +1032,11 @@ function POSContent() {
       if (!isPending) {
         setShowReceipt(true);
         toast.success("Order processed and paid!");
-        triggerCashierPrint(orderData);
+        // Only trigger background hardware printing if a physical ESC/POS printer IP is configured
+        const activeCashierIp = (typeof window !== "undefined" ? localStorage.getItem("cashierPrinterIp") : "") || tenantSettings?.cashierPrinterIp;
+        if (activeCashierIp) {
+          triggerCashierPrint(orderData);
+        }
       } else {
         toast.success("Order sent to kitchen!");
       }
@@ -1265,12 +1265,7 @@ useEffect(() => {
     const order = orderToPrint || lastOrder;
     if (!order) return;
 
-    const win = window.open("", "_blank");
-    if (!win) {
-      toast.error("Popup blocked! Please enable popups to print receipt.");
-      return;
-    }
-    const businessName = tenantSettings?.name || "Cheesy Bite";
+    const businessName = tenantSettings?.name || "Lincoz Pharmacy";
     
     const logoHtml = (!hasPharmacy && !isGym && tenantSettings?.logoUrl) 
       ? `<img src="${tenantSettings.logoUrl}" style="max-width: 80px; max-height: 80px; margin: 0 auto 8px auto; display: block;" alt="Business Logo" />` 
@@ -1375,7 +1370,7 @@ useEffect(() => {
       `;
     }
 
-    win.document.write(`
+    const receiptHtml = `
       <html><head><title>${businessName}</title>
       <style>
         @page { 
@@ -1478,13 +1473,33 @@ useEffect(() => {
         <div style="height: 90px;"></div>
       </div>
       </body></html>
-    `);
-    win.document.close();
-    setTimeout(() => {
-      win.focus();
-      win.print();
-      win.close();
-    }, 350);
+    `;
+
+    // Seamless hidden iframe printing: triggers native print dialog directly without opening blank new tabs/windows
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "none";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(receiptHtml);
+      doc.close();
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+          if (iframe.parentNode) {
+            iframe.parentNode.removeChild(iframe);
+          }
+        }, 1500);
+      }, 250);
+    }
   };
 
   const triggerCashierPrint = async (order: any) => {
