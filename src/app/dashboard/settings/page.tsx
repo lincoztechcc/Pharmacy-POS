@@ -13,7 +13,8 @@ import {
   CreditCard,
   Clock,
   Sparkles,
-  CheckCircle
+  CheckCircle,
+  Percent
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,12 +100,39 @@ export default function SettingsPage() {
     if (!profileForm.name.trim()) return toast.error("Name cannot be empty");
     setSaving(true);
     try {
-      const res = await axios.patch("/api/users/me", {
-        name: profileForm.name,
-        phone: profileForm.phone,
+      const isManager = user?.role === "TENANT_ADMIN" || user?.role === "SUPER_ADMIN" || user?.role === "BRANCH_MANAGER";
+      
+      const promises: Promise<any>[] = [
+        axios.patch("/api/users/me", {
+          name: profileForm.name,
+          phone: profileForm.phone,
+        })
+      ];
+
+      if (isManager && user?.tenant) {
+        promises.push(axios.patch("/api/tenants/me", businessForm));
+      }
+
+      const [userRes, tenantRes] = await Promise.all(promises);
+      
+      setUser((prev: any) => {
+        const updated = {
+          ...prev,
+          name: userRes.data.name,
+          phone: userRes.data.phone,
+          tenant: tenantRes?.data ? { ...prev.tenant, ...tenantRes.data } : prev.tenant,
+        };
+
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("user_cache", JSON.stringify(updated));
+          } catch {}
+        }
+
+        return updated;
       });
-      setUser((prev: any) => ({ ...prev, name: res.data.name, phone: res.data.phone }));
-      toast.success("Profile updated successfully");
+
+      toast.success("Profile and tax settings updated successfully");
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Failed to update profile");
     } finally {
@@ -116,8 +144,16 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       const res = await axios.patch("/api/tenants/me", businessForm);
-      setUser((prev: any) => ({ ...prev, tenant: { ...prev.tenant, ...res.data } }));
-      toast.success("Business settings saved successfully");
+      setUser((prev: any) => {
+        const updated = { ...prev, tenant: { ...prev.tenant, ...res.data } };
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("user_cache", JSON.stringify(updated));
+          } catch {}
+        }
+        return updated;
+      });
+      toast.success("Business & tax settings saved successfully");
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Failed to update business settings");
     } finally {
@@ -216,10 +252,64 @@ export default function SettingsPage() {
                   <Input className="h-12 rounded-xl bg-slate-50" value={user?.email || ""} disabled />
                   <p className="text-xs text-slate-400">Email cannot be changed. Contact admin.</p>
                 </div>
+
+                {/* Pharmacy Sales Tax Percentage Configuration */}
+                {(user?.role === "TENANT_ADMIN" || user?.role === "SUPER_ADMIN" || user?.role === "BRANCH_MANAGER") && (
+                  <div className="pt-5 border-t border-slate-100 space-y-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Percent className="w-4 h-4 text-blue-600" />
+                        <h4 className="font-bold text-slate-900 text-sm">Pharmacy Sales Tax Rates (%)</h4>
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        Set custom tax rates for your pharmacy at will. These apply in real-time to POS counter checkouts.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label className="font-bold text-xs text-slate-700">Cash Payment Tax (%)</Label>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            className="h-11 rounded-xl pr-8 font-bold"
+                            placeholder="e.g. 16 or 0"
+                            value={businessForm.cashTaxRate}
+                            onChange={(e) => setBusinessForm({ ...businessForm, cashTaxRate: parseFloat(e.target.value) || 0 })}
+                          />
+                          <span className="absolute right-3 top-3 text-xs font-bold text-slate-400">%</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-medium">Applied to Cash orders (e.g. 16% FBR or 0% tax-exempt).</p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="font-bold text-xs text-slate-700">Card Payment Tax (%)</Label>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            className="h-11 rounded-xl pr-8 font-bold"
+                            placeholder="e.g. 5 or 0"
+                            value={businessForm.cardTaxRate}
+                            onChange={(e) => setBusinessForm({ ...businessForm, cardTaxRate: parseFloat(e.target.value) || 0 })}
+                          />
+                          <span className="absolute right-3 top-3 text-xs font-bold text-slate-400">%</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-medium">Applied to Card orders (e.g. 5% FBR or 0% tax-exempt).</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="pt-4">
                   <Button disabled={saving} className="h-11 rounded-xl bg-blue-600 hover:bg-blue-700 font-bold text-base px-6 shadow-md shadow-blue-100 text-white transition-all active:scale-95">
                     {saving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
-                    Save Profile Changes
+                    Save Profile & Tax Settings
                   </Button>
                 </div>
               </form>
